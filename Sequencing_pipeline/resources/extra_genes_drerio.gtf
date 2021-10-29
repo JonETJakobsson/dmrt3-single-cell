@@ -1,0 +1,2 @@
+eGFP	transgene	exon	1	609	.	+	.	gene_id "eGFP"; transcript_id "eGFP"; exon_number "1";
+Gal4	transgene	exon	1	540	.	+	.	gene_id "Gal4"; transcript_id "Gal4"; exon_number "1";

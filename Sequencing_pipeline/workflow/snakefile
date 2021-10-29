@@ -1,0 +1,330 @@
+from itertools import product
+
+
+COLUMNS = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P"]
+ROWS = list(range(1,25))
+WELLS = [col+str(row) for col, row in list(product(COLUMNS, ROWS))]
+
+
+
+rule all:
+    input:
+        #genome files
+        #"resources/genome/mmusculus/mmusculus.gtf", 
+        #"resources/genome/drerio/drerio.gtf",
+        #"resources/genome/mmusculus/merged.gtf",
+        #"resources/genome/drerio/merged.gtf",
+        #Rule plot
+        "rule_graph.png",
+        # Fastq files
+        # expand("results/qc/fastqc/mmusculus/{well}_R1_fastqc.zip", well=WELLS),
+        # expand("results/qc/fastqc/drerio/{well}_R1_fastqc.zip", well=WELLS),
+        # Multiqc
+        "results/qc/multiqc/mmusculus/multiqc_report.html",
+        "results/qc/multiqc/drerio/multiqc_report.html",
+        # Generate genome idices
+        #"resources/genome_index/mmusculus",
+        #"resources/genome_index/drerio",
+        #Generate aligned reads
+        #expand("resources/aligned_reads/mmusculus/{well}/Aligned.sortedByCoord.out.bam", well=WELLS),
+        #expand("resources/aligned_reads/drerio/{well}/Aligned.sortedByCoord.out.bam", well=WELLS),
+        # Genereate velocity loom
+        "results/velocyto/mmusculus.loom",
+        "results/velocyto/drerio.loom",
+        "results/featureCounts/mmusculus/mmusculus_count.txt",
+        "results/featureCounts/drerio/drerio_count.txt",
+        "results/loom/mmusculus.loom",
+        "results/loom/drerio.loom"
+
+rule build_rulegraph:
+    output: "rule_graph.png"
+    shell:
+        "snakemake --rulegraph | dot -Tpng > {output}"
+
+rule get_annotation_mmusculus:
+    output:
+        "resources/genome/mmusculus/mmusculus.gtf"
+    params:
+        species="mus_musculus",
+        release="101",
+        build="GRCm38",
+        fmt="gtf",
+        flavor="" # optional, e.g. chr_patch_hapl_scaff, see Ensembl FTP.
+    log:
+        "logs/get_annotation_mmousculus.log"
+    wrapper:
+        "0.64.0/bio/reference/ensembl-annotation"
+
+rule get_annotation_drerio:
+    output:
+        "resources/genome/drerio/drerio.gtf"
+    params:
+        species="danio_rerio",
+        release="91",
+        build="GRCz10",
+        fmt="gtf",
+        flavor="" # optional, e.g. chr_patch_hapl_scaff, see Ensembl FTP.
+    log:
+        "logs/get_annotation_drerio.log"
+    wrapper:
+        "0.64.0/bio/reference/ensembl-annotation"
+
+rule get_genome_mmusculus:
+    output:
+        "resources/genome/mmusculus/mmusculus.fa"
+    params:
+        species="mus_musculus",
+        datatype="dna",
+        build="GRCm38",
+        release="101"
+    log:
+        "logs/get_genome_mmusculus.log"
+    wrapper:
+        "0.64.0/bio/reference/ensembl-sequence"
+
+rule get_genome_drerio:
+    output:
+        "resources/genome/drerio/drerio.fa"
+    params:
+        species="danio_rerio",
+        datatype="dna",
+        build="GRCz10",
+        release="91",
+    log:
+        "logs/get_genome_drerio.log"
+    wrapper:
+        "0.64.0/bio/reference/ensembl-sequence"
+
+
+rule merge_GTF_mmusculus:
+    input:
+        "resources/genome/mmusculus/mmusculus.gtf",
+        "resources/genome/extra_genes_mmusculus.gtf",
+        "resources/genome/ERCC92.gtf"
+    output: 
+        "resources/genome/mmusculus/merged.gtf"
+    group:
+        "mmusculus"
+    shell:
+        "cat {input} > {output}"
+
+rule merge_GTF_drerio:
+    input:
+        "resources/genome/drerio/drerio.gtf",
+        "resources/genome/extra_genes_drerio.gtf",
+        "resources/genome/ERCC92.gtf"
+    output: 
+        "resources/genome/drerio/merged.gtf"
+    group:
+        "drerio"
+    shell:
+        "cat {input} > {output}"
+
+rule fastqc_mmusculus:
+    input:
+        "resources/rawdata/mmusculus/{well}/{well}_R1.fastq"
+    output:
+        "results/qc/fastqc/mmusculus/{well}_R1_fastqc.zip"  # the suffix _fastqc.zip is necessary for multiqc to find the file. If not using multiqc, you are free to choose an arbitrary filename
+    params:
+        outDir="results/qc/fastqc/mmusculus/"
+
+    conda: "envs/qc.yml"
+    threads: workflow.cores
+    shell:
+        "fastqc -o {params.outDir} -t {threads} {input}"
+
+rule fastqc_drerio:
+    input:
+        "resources/rawdata/drerio/{well}/{well}_R1.fastq"
+    output:
+        "results/qc/fastqc/drerio/{well}_R1_fastqc.zip"  # the suffix _fastqc.zip is necessary for multiqc to find the file. If not using multiqc, you are free to choose an arbitrary filename
+    params:
+        outDir="results/qc/fastqc/drerio/"
+
+    conda: "envs/qc.yml"
+    threads: workflow.cores
+    shell:
+        "fastqc -o {params.outDir} -t {threads} {input}"
+
+rule multiqc_mmusculus:
+    input:
+        expand("results/qc/fastqc/mmusculus/{well}_R1_fastqc.zip", well=WELLS),
+        expand("resources/aligned_reads/mmusculus/{well}/Aligned.sortedByCoord.out.bam", well=WELLS),
+        "results/featureCounts/mmusculus/mmusculus_count.txt"
+    output:
+        "results/qc/multiqc/mmusculus/multiqc_report.html"
+    params:
+        inDir=["results/qc/fastqc/mmusculus/", "resources/aligned_reads/mmusculus/", "results/featureCounts/mmusculus/"],
+        outDir="results/qc/multiqc/mmusculus"
+    conda: "envs/qc.yml"
+    shell:
+        """
+        multiqc {params.inDir} -n multiqc_report.html -o {params.outDir} -f
+        """
+
+rule multiqc_drerio:
+    input:
+        expand("results/qc/fastqc/drerio/{well}_R1_fastqc.zip", well=WELLS),
+        expand("resources/aligned_reads/drerio/{well}/Aligned.sortedByCoord.out.bam", well=WELLS),
+        "results/featureCounts/drerio/drerio_count.txt"
+    output:
+        "results/qc/multiqc/drerio/multiqc_report.html"
+    params:
+        inDir=["results/qc/fastqc/drerio/", "resources/aligned_reads/drerio/", "results/featureCounts/drerio/"],
+        outDir="results/qc/multiqc/drerio"
+    conda: "envs/qc.yml"
+    shell:
+        """
+        multiqc {params.inDir} -n multiqc_report.html -o {params.outDir} -f
+        """
+
+
+rule STAR_index_mmusculus:
+    input:
+        fasta = [
+            "resources/genome/extra_genes.fa",
+            "resources/genome/ERCC92.fa",
+            "resources/genome/mmusculus/mmusculus.fa"],
+        gtf = "resources/genome/mmusculus/merged.gtf"
+    output:
+        directory("resources/genome_index/mmusculus")
+    conda:
+        "envs/star.yml"
+    group:
+        "mmusculus"
+    threads: workflow.cores
+    shell:
+        """
+        STAR --runMode genomeGenerate --genomeDir {output} --genomeFastaFiles {input.fasta} --sjdbGTFfile {input.gtf} --sjdbOverhang 42 --runThreadN {threads} --genomeSAsparseD 2 --limitGenomeGenerateRAM 15000000000
+        """
+
+rule STAR_index_drerio:
+    input:
+        fasta = [
+            "resources/genome/extra_genes.fa",
+            "resources/genome/ERCC92.fa",
+            "resources/genome/drerio/drerio.fa"],
+        gtf = "resources/genome/drerio/merged.gtf"
+    output:
+        directory("resources/genome_index/drerio")
+    conda:
+        "envs/star.yml"
+    group:
+        "drerio"
+    threads: workflow.cores
+    shell:
+        """
+        STAR --runMode genomeGenerate --genomeDir {output} --genomeFastaFiles {input.fasta} --sjdbGTFfile {input.gtf} --sjdbOverhang 42 --runThreadN {threads} --genomeSAsparseD 2 --limitGenomeGenerateRAM 15000000000
+        """
+
+rule read_alignment_STAR_mmusculus:
+    input:
+       fastq = "resources/rawdata/mmusculus/{well}/{well}_R1.fastq",
+       genomeIndex = "resources/genome_index/mmusculus"
+    output:
+        "resources/aligned_reads/mmusculus/{well}/Aligned.sortedByCoord.out.bam"
+    params:
+        #inString = ",".join(expand("resources/Rawdata/cells/{{plate}}/{well}.fastq.gz", well=WELLS)),
+        tmpDir = "/tmp/.STAR/mmusculus/{well}",
+        outDir = "resources/aligned_reads/mmusculus/{well}/",
+        attributes = "ID:{well}"
+    conda:
+        "envs/star.yml"
+    group:
+        "mmusculus"
+    shell:
+        """
+        mkdir {params.tmpDir} -p -m 777
+        STAR --runMode alignReads --readFilesIn {input.fastq} --outFileNamePrefix {params.outDir} --outSAMattrRGline {params.attributes} --outTmpDir {params.tmpDir}/tmp --genomeDir {input.genomeIndex} --outSAMtype BAM SortedByCoordinate --limitBAMsortRAM 31000000000 --genomeLoad LoadAndKeep
+        """
+
+rule read_alignment_STAR_drerio:
+    input:
+       fastq = "resources/rawdata/drerio/{well}/{well}_R1.fastq",
+       genomeIndex = "resources/genome_index/drerio"
+    output:
+        "resources/aligned_reads/drerio/{well}/Aligned.sortedByCoord.out.bam"
+    params:
+        #inString = ",".join(expand("resources/Rawdata/cells/{{plate}}/{well}.fastq.gz", well=WELLS)),
+        tmpDir = "/tmp/.STAR/drerio/{well}",
+        outDir = "resources/aligned_reads/drerio/{well}/",
+        attributes = "ID:{well}"
+    conda:
+        "envs/star.yml"
+    group:
+        "drerio"
+    shell:
+        """
+        mkdir {params.tmpDir} -p -m 777
+        STAR --runMode alignReads --readFilesIn {input.fastq} --outFileNamePrefix {params.outDir} --outSAMattrRGline {params.attributes} --outTmpDir {params.tmpDir}/tmp --genomeDir {input.genomeIndex} --outSAMtype BAM SortedByCoordinate --limitBAMsortRAM 31000000000 --genomeLoad LoadAndKeep
+        """
+
+
+rule velocyto_mmusculus:
+    input:
+        bam = expand("resources/aligned_reads/mmusculus/{well}/Aligned.sortedByCoord.out.bam", well=WELLS),
+        gtf = "resources/genome/mmusculus/merged.gtf"
+    output:
+        "results/velocyto/mmusculus.loom"
+    params:
+        outDir = "results/velocyto/",
+        sampleID = "mmusculus"
+    shell:
+        """
+        velocyto run-smartseq2 -o {params.outDir} -e {params.sampleID} {input.bam} {input.gtf}
+        """
+
+rule velocyto_drerio:
+    input:
+        bam = expand("resources/aligned_reads/drerio/{well}/Aligned.sortedByCoord.out.bam", well=WELLS),
+        gtf = "resources/genome/drerio/merged.gtf"
+    output:
+        "results/velocyto/drerio.loom"
+    params:
+        outDir = "results/velocyto/",
+        sampleID = "drerio"
+    shell:
+        """
+        velocyto run-smartseq2 -o {params.outDir} -e {params.sampleID} {input.bam} {input.gtf}
+        """
+
+
+rule featureCounts_mmusculus:
+    input:
+        bam = expand("resources/aligned_reads/mmusculus/{well}/Aligned.sortedByCoord.out.bam", well=WELLS),
+        gtf = "resources/genome/mmusculus/merged.gtf"
+    output:
+        "results/featureCounts/mmusculus/mmusculus_count.txt"
+    shell:
+        """
+        featureCounts -t exon -g gene_id -a {input.gtf} -o {output} {input.bam}
+        """
+
+rule featureCounts_drerio:
+    input:
+        bam = expand("resources/aligned_reads/drerio/{well}/Aligned.sortedByCoord.out.bam", well=WELLS),
+        gtf = "resources/genome/drerio/merged.gtf"
+    output:
+        "results/featureCounts/drerio/drerio_count.txt"
+    shell:
+        """
+        featureCounts -t exon -g gene_id -a {input.gtf} -o {output} {input.bam}
+        """
+
+rule to_loom_files_mmusculus:
+    input:
+        counts = "results/featureCounts/mmusculus/mmusculus_count.txt",
+        velocyto = "results/velocyto/mmusculus.loom"
+    output:
+        loom = "results/loom/mmusculus.loom"
+    script:
+        "scripts/to_loom.py"
+
+rule to_loom_files_drerio:
+    input:
+        counts = "results/featureCounts/drerio/drerio_count.txt",
+        velocyto = "results/velocyto/drerio.loom"
+    output:
+        loom = "results/loom/drerio.loom"
+    script:
+        "scripts/to_loom.py"

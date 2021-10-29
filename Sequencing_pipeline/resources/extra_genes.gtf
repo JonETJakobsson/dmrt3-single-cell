@@ -1,0 +1,4 @@
+eGFP	transgene	exon	1	609	.	+	.	gene_id "eGFP"; transcript_id "eGFP"; exon_number "1";
+tdTomato	transgene	exon	1	711	.	+	.	gene_id "tdTomato"; transcript_id "tdTomato"; exon_number "1";
+Cre	transgene	exon	1	1032	.	+	.	gene_id "Cre"; transcript_id "Cre"; exon_number "1";
+iCre	transgene	exon	1	1056	.	+	.	gene_id "iCre"; transcript_id "iCre"; exon_number "1";
